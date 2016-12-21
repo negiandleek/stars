@@ -1,0 +1,7 @@
+static/
+server/
+node_modules/
+.browserify-cache
+*.txt
+*.ttf
+.sass-cache

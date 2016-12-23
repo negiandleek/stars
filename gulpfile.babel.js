@@ -111,9 +111,9 @@ gulp.task('mv:html', (cb) => {
         .pipe(gulp.dest(path.static))
 })
 
-// Xml
-gulp.task('mv:xml', (cb) => {
-    return gulp.src(path.public + '{,**/}*.xml')
+// Json
+gulp.task('mv:json', (cb) => {
+    return gulp.src(path.public + '{,**/}*.json')
         .pipe($.plumber())
         .pipe(gulp.dest(path.static))
 })
@@ -175,7 +175,7 @@ gulp.task('default', (cb) => {
     seq('clean:tmpdir',
         'enable:debug-mode',
         'enable:watch-mode',
-        ['mv:html','build:sass','babel','mv:csv',"mv:images", "mv:xml"],
+        ['mv:html','build:sass','babel','mv:csv',"mv:images", "mv:json"],
         'build:js',
         'watch',
         'clean:tmpdir',

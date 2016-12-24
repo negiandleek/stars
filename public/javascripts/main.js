@@ -37,8 +37,9 @@
 		$.stage.addChild($.you.get_pixi());
 
 		// 操作できないプレイヤー(他プレイヤー)の管理
-		$.enemys = new PIXI.Container();
-		$.stage.addChild($.enemys);
+		$.other = new PIXI.Container();
+		$.enemys = {};
+		$.stage.addChild($.other);
 
 		// keyboard arrow keys
 		let left = keyboard(37);
@@ -96,21 +97,34 @@
 		}
 
 		// 他プレイヤーの情報を初期化する
-		enemy_loop();
+		other_loop();
+		setTimeout(other_loop, 1200);
 
 		game_loop();
 	}
 
 	// 仮
-	let json = [
-		{"id": 2, "position":{"x": 50, "y": 50}, "alive": true, "angle": 45},
-		{"id": 4, "position":{"x": 400, "y": 50}, "alive": true, "angle": 215},
-	];
+	let json = {
+		"stars":[
+			{"id": 2, "position":{"x": 50, "y": 50}, "alive": true, "angle": 45},
+			{"id": 4, "position":{"x": 400, "y": 50}, "alive": true, "angle": 215}
+		],
+		"bullets": [
+			{"id": 0, "position":{"x": 50, "y": 50}, "alive": true, "angle": 45},
+			{"id": 1, "position":{"x": 400, "y": 50}, "alive": true, "angle": 215}
+		]
+
+	setTimeout(()=>{
+		json = [
+			{"id": 2, "position":{"x": 58, "y": 58}, "alive": true, "angle": 215},
+			{"id": 4, "position":{"x": 408, "y": 58}, "alive": true, "angle": 45},
+		]
+	}, 1000)
 
 	let game_loop = () => {
 		request_animation_frame(game_loop);
+		// other_loop();
 		$.you.move();
-		// enemy_loop();
 		$.renderer.render($.stage);
 	}
 
@@ -160,9 +174,23 @@
 		}
 	}
 
-	let enemy_loop = () => {
+	let other_loop = () => {
 		json.map((property, index) => {
-			$.enemys.addChild(new Enemy(property).get_pixi());
+			let already = false;
+			console.log($.enemys);
+			for(let _key in $.enemys){
+				let key = _key - 0;
+				if(property.id === key){
+					already = true;
+					break;
+				};
+			}
+			if(already){
+				$.enemys[property.id].update(property);
+			}else{
+				$.enemys[property.id] = new Enemy(property);
+				$.other.addChild($.enemys[property.id].get_pixi());
+			}
 		})
 	}
 
@@ -220,6 +248,10 @@
 	class Enemy extends StarManage{
 		constructor(data){
 			super();
+
+			this.running = true;
+			this.alive = true;
+
 			this.radius = 16;
 			this.angle = 0;
 		
@@ -261,6 +293,11 @@
 			this.star.y = data.position.y;
 
 			// 回転させる
+			this.rotate(data.angle);
+		}
+		update(data) {
+			this.star.x = data.position.x;
+			this.star.y = data.position.y;
 			this.rotate(data.angle);
 		}
 		get_pixi(){
@@ -401,6 +438,7 @@
 		}
 		move() {
 			if(this.is_ready){
+				// 斜めの時はベクトルを正規化する
 				this.body.x += this.vx
 	 			this.body.y += this.vy;
 	 		}else{

@@ -33,17 +33,18 @@
 
 		// 操作できるプレイヤー(あなた)の管理
 		$.you = new Player();
-		// ステージに追加
 		$.stage.addChild($.you.get_pixi());
+
+		// プレイヤーの発射したショットの管理
+		$.you_shots = new PIXI.Container();
+		$.stage.addChild($.you_shots);
 
 		// 操作できないプレイヤー(他プレイヤー)の管理
 		$.other = new PIXI.Container();
-		$.enemys = {};
 		$.stage.addChild($.other);
 
 		// 他プレイヤーの発射したショットの管理
 		$.other_bullets = new PIXI.Container();
-		$.bullets = {};
 		$.stage.addChild($.other_bullets);
 
 		// keyboard arrow keys
@@ -120,23 +121,14 @@
 		]
 	}
 
-	// 自分以外を移動させるためのサンプル
-	let sample = function (){
-		let y = json.stars[0].position.y + 2;
-		json.bullets.map((property)=>{
-			property.position.y += 8;
-		})
-		if(y <= stage.y){
-			json.stars[0].position.y = y;
-		}
-	};
 
 	let game_loop = () => {
 		request_animation_frame(game_loop);
 
-		sample();
+		sample_loop();
 		other_loop();
-		$.you.move();
+		$.you.loop();  
+		shot_loop();
 		$.renderer.render($.stage);
 	}
 
@@ -186,161 +178,143 @@
 		}
 	}
 
+	// r1 stars
+	// r2 stars or bullet
+	let is_hit_circle = (r1, r2) => {
+ 		let hit = false;
+ 		let d = r1.distance(r2);
+ 		if(d.length() <= r1.radius){
+ 			console.log("hit!");
+ 		};
+	}
+
+	// 自分以外を移動させるためのサンプル
+	let sample_loop = function (){
+		let y = json.stars[0].position.y + 2;
+		json.bullets.map((property)=>{
+			property.position.y += 8;
+		})
+		if(y <= stage.y){
+			json.stars[0].position.y = y;
+		}
+	};
+
 	let other_loop = () => {
 		json.stars.map((property, index) => {
 			let already = false;
-			for(let _key in $.enemys){
-				let key = _key - 0;
-				if(property.id === key){
+			let length = $.other.children.length;
+
+			for(let i = 0; i < length; i += 1){
+				let item = $.other.children[i];
+				if(item.id === property.id){
 					already = true;
+					index = i;
 					break;
-				};
+				}
 			}
+
 			if(already){
-				$.enemys[property.id].update(property);
+				$.other.children[index].update(property);
 			}else{
-				$.enemys[property.id] = new Enemy(property);
-				$.other.addChild($.enemys[property.id].get_pixi());
+				$.other.addChild(new Enemy(property).star);
 			}
 		});
 
-		json.bullets.map((property, index) => {
+		json.bullets.map((property) => {
 			let already = false;
-			for(let _key in $.bullets){
-				let key = _key - 0;
-				if(property.id === key){
+			let index = 0;
+			let length = $.other_bullets.children.length;
+
+			for(let i = 0; i < length; i += 1){
+				let item = $.other_bullets.children[i];
+				if(item.id === property.id){
 					already = true;
+					index = i;
 					break;
-				};
+				}
 			}
 			if(already){
-				$.bullets[property.id].update(property);
+				$.other_bullets.children[index].update(property);
 			}else{
-				$.bullets[property.id] = new Bullet(property);
-				$.other.addChild($.bullets[property.id].get_pixi());
+				let x = property.position.x;
+				let y = property.position.y;
+				let angle = property.angle;
+				let id = property.id;
+				$.other_bullets.addChild(new Bullet(x, y, angle, id));
 			}
 		});
 	}
 
-	class StarManage {
+	let shot_loop = function () {
+		$.you_shots.children.map((property, index) => {
+			property.move();
+		})
+	}
+
+	class Point {
 		constructor() {
-			this.piece = 360 / directions.length;
+			this.x = 0;
+			this.y = 0
 		}
-		detecte_angle() {
-			let y_sign = get_sign(this.vy);
-			let x_sign = get_sign(this.vx);
-			let y_axis = "";
-			let x_axis = "";
-			let str_direction = "";
-			let i = 0;
-
-			if(y_sign === 0 && x_sign === 0){
-				return this.angle;
-			}
-
-			if(y_sign === -1){
-				y_axis = "UP";
-			}else if(y_sign === 1){
-				y_axis = "DOWN";
-			}
-
-			if(x_sign === 1){
-				x_axis = "RIGHT";
-			}else if(x_sign === -1){
-				x_axis = "LEFT";
-			}
-
-			str_direction = y_axis + x_axis;
-
-			i = directions.indexOf(str_direction);
-			return i * this.piece;
-		}
-		get_radian(now){
-			let previous = this.angle;
-			let sub = now - previous;
-			
-			// 0 ~ 360に収まるように変換する
-			sub -= Math.floor(sub / 360) * 360;
-
-			// -180 ~ 180に収まるように変換する
-			if(sub > 180){
-				sub -= 360;
-			}
-
-			// radianに変換
-			let rad = sub * (Math.PI / 180);
-			return rad;
+		length() {
+			return Math.sqrt(this.x * this.x + this.y * this.y);
 		}
 	}
+	let StarContainer = function() {
+		PIXI.Container.call(this);
+		this.piece = 360 / directions.length;
+	}
+	StarContainer.constructor = StarContainer;
 
-	class Enemy extends StarManage{
-		constructor(data){
-			super();
+	StarContainer.prototype = Object.create(PIXI.Container.prototype);
+	StarContainer.prototype.detecte_angle = function() {
+		let y_sign = get_sign(this.vy);
+		let x_sign = get_sign(this.vx);
+		let y_axis = "";
+		let x_axis = "";
+		let str_direction = "";
+		let i = 0;
 
-			this.running = true;
-			this.alive = true;
+		if(y_sign === 0 && x_sign === 0){
+			return this.angle;
+		}
 
-			this.radius = 16;
-			this.angle = 0;
+		if(y_sign === -1){
+			y_axis = "UP";
+		}else if(y_sign === 1){
+			y_axis = "DOWN";
+		}
+
+		if(x_sign === 1){
+			x_axis = "RIGHT";
+		}else if(x_sign === -1){
+			x_axis = "LEFT";
+		}
+
+		str_direction = y_axis + x_axis;
+
+		i = directions.indexOf(str_direction);
+		return i * this.piece;
+	}
+
+	StarContainer.prototype.get_radian = function(now) {
+		let previous = this.angle;
+		let sub = now - previous;
 		
-			// 敵の本体
-			this.body = new PIXI.Graphics();
-			this.body.beginFill(0x0000ff);
-			this.body.drawCircle(0, 0, this.radius);
-			this.body.endFill();
-			this.body.x = 0;
-			this.body.y = 0;
+		// 0 ~ 360に収まるように変換する
+		sub -= Math.floor(sub / 360) * 360;
 
-			// safe zone
-			this.circle = new PIXI.Graphics();
-			this.circle.lineStyle(2, 0x000);
-			this.circle.drawCircle(0, 0, this.radius * 2);
-			this.circle.endFill();
-			this.circle.x = this.body.x;
-			this.circle.y = this.body.y;
-
-			// 矢印
-			this.arrow = new PIXI.Graphics();
-			this.arrow.beginFill(0x000);
-			this.arrow.drawPolygon([
-				-4, 12,
-				4, 12,
-				0, 0,
-			]);
-			this.arrow.endFill();
-			this.arrow.x = this.body.x;
-			this.arrow.y = this.body.y - this.radius - 16;
-
-			// グループ化する
-			this.star = new PIXI.Container();
-			this.star.addChild(this.body);
-			this.star.addChild(this.circle);
-			this.star.addChild(this.arrow);
-
-			this.star.x = data.position.x;
-			this.star.y = data.position.y;
-
-			// 回転させる
-			this.rotate(data.angle);
+		// -180 ~ 180に収まるように変換する
+		if(sub > 180){
+			sub -= 360;
 		}
-		update(data) {
-			this.star.x = data.position.x;
-			this.star.y = data.position.y;
-			this.rotate(data.angle);
-		}
-		get_pixi(){
-			// pixiに関する情報を返す
-			return this.star;
-		}
-		rotate(angle){
-			if(this.angle !== angle){
-				this.star.rotation += this.get_radian(angle);
-				this.angle = angle;
-			}
-		}
+
+		// radianに変換
+		let rad = sub * (Math.PI / 180);
+		return rad;
 	}
 
-	class Player extends StarManage{
+	class Player extends StarContainer{
 		constructor(x, y) {
 			super();
 			this.running = true;
@@ -397,7 +371,9 @@
 			// pixiに関する情報を返す
 			return this.star;
 		}
-		move() {
+		loop() {
+			// 衝突判定
+			// $.is_hit_circle(this.body, )
 		 	// 表示判定
 			if(this.running && this.alive){
 				let x = this.star.x + this.vx;
@@ -424,7 +400,8 @@
 			if(this.fired_bullets < this.loaded_bullets){
 				let x = this.arrow.getGlobalPosition().x;
 				let y = this.arrow.getGlobalPosition().y;
-				new Bullet(x, y, this.angle);
+				let shot = Bullet(x, y, this.angle);
+				$.you_shots.addChild(shot);
 				this.fired_bullets += 1;
 				
 				// 発射すると装填時間がそれぞれにかかる
@@ -434,40 +411,110 @@
 		load_shot() {
 			this.fired_bullets -= 1;
 		}
+		distance(target) {
+			let p = new Point();
+			p.x = target.x - this.body.x
+			p.y =  target.y - this.body.y
+			return p;
+		}
 	}
 
-	class Bullet{
-		constructor(x, y, angle){
-			this.running = true;
-			this.alive = true;
+	function Enemy(data){
+		let self = {};
+		self.running = true;
+		self.alive = true;
 
-			this.radius = 4;
-			this.body = new PIXI.Graphics();
-			this.body.beginFill(0x000);
-			this.body.drawCircle(0, 0, this.radius);
-			this.body.endFill();
-			this.body.x = x;
-			this.body.y = y;
-			this.angle = angle
-			this.is_ready = false;
-			
-			// ステージに追加
-			$.stage.addChild(this.body);
+		self.radius = 16;
+	
+		// 敵の本体
+		self.body = new PIXI.Graphics();
+		self.body.beginFill(0x0000ff);
+		self.body.drawCircle(0, 0, self.radius);
+		self.body.endFill();
+		self.body.x = 0;
+		self.body.y = 0;
 
-			// 決まった方向に動かす
-			this.vx = 0;
-			this.vy = 0;
-			this.speed = 8;
-			
-			// vxとvyを定めるする
-			this.get_direction(angle);
-			this.move();
+		// safe zone
+		self.circle = new PIXI.Graphics();
+		self.circle.lineStyle(2, 0x000);
+		self.circle.drawCircle(0, 0, self.radius * 2);
+		self.circle.endFill();
+		self.circle.x = self.body.x;
+		self.circle.y = self.body.y;
+
+		// 矢印
+		self.arrow = new PIXI.Graphics();
+		self.arrow.beginFill(0x000);
+		self.arrow.drawPolygon([
+			-4, 12,
+			4, 12,
+			0, 0,
+		]);
+		self.arrow.endFill();
+		self.arrow.x = self.body.x;
+		self.arrow.y = self.body.y - self.radius - 16;
+
+		// グループ化する
+		self.star = new StarContainer();
+		self.star.addChild(self.body);
+		self.star.addChild(self.circle);
+		self.star.addChild(self.arrow);
+		self.star.x = data.position.x;
+		self.star.y = data.position.y;
+		self.star.id = data.id || -1;
+		self.star.angle = 0;
+
+		self.star.update = function(data) {
+			this.x = data.position.x;
+			this.y = data.position.y;
+			this.rotate(data.angle);
 		}
-		update(data) {
-			this.body.x = data.position.x;
-			this.body.y = data.position.y;
+
+		self.star.rotate = function(angle) {
+			if(this.angle !== angle){
+				this.rotation += this.get_radian(angle);
+				this.angle = angle;
+			}
 		}
-		get_direction(angle) {
+
+		// 回転させる
+		self.star.rotate(data.angle);
+
+		return self;
+	}
+
+	function Bullet(x, y, angle, id){
+		let body = new PIXI.Graphics();
+		body.id = -1;
+		body.running = true;
+		body.alive = true;
+
+		body.radius = 4;
+
+		body.beginFill(0x000);
+		body.drawCircle(0, 0, body.radius);
+		body.endFill();
+		body.x = x;
+		body.y = y;
+
+		body.angle = angle;
+		body.is_ready = false;
+		
+		// ステージに追加
+		$.stage.addChild(body);
+
+		// 決まった方向に動かす
+		body.vx = 0;
+		body.vy = 0;
+		body.speed = 8;
+		body.id = id || 0;
+		
+		body.update = function(data){
+			this.x = data.position.x;
+			this.y = data.position.y;
+		}
+
+		body.get_direction = function(angle) {
 			let sin =  Math.sin(angle * (Math.PI / 180));
 			sin = sin * 10 | 0 ? get_sign(sin): 0;
 
@@ -477,28 +524,25 @@
 			this.vx = sin * this.speed;
 			this.vy = -1 * cos * this.speed;
 		}
-		get_pixi(){
-			return this.body;
-		}
-		move() {
+		body.move = function() {
 			if(this.is_ready){
 				// 斜めの時はベクトルを正規化する
-				this.body.x += this.vx
-	 			this.body.y += this.vy;
+				this.x += this.vx
+	 			this.y += this.vy;
 	 		}else{
 	 			this.is_ready = true;
 	 		}
 
-	 		let tmpx = this.body.x + this.radius;
-	 		let subx = this.body.x - this.radius;
+	 		let tmpx = this.x + this.radius;
+	 		let subx = this.x - this.radius;
 
-	 		let tmpy = this.body.y + this.radius;
-	 		let suby = this.body.y - this.radius;
+	 		let tmpy = this.y + this.radius;
+	 		let suby = this.y - this.radius;
 
 
 	 		// 表示判定
 	 		if(!this.alive && !this.running){
-	 			$.stage.removeChild(this.body);
+	 			$.stage.removeChild(this);
 	 			return;
 	 		}
 
@@ -506,11 +550,15 @@
 	 		subx > stage.x ||
 	 		tmpy < 0 || 
 	 		suby > stage.y){
-	 			$.stage.removeChild(this.body);
-	 		}else{
-	 			request_animation_frame(this.move.bind(this));
+	 			$.stage.removeChild(this);
 	 		}
 		}
+
+		// vxとvyを定める
+		body.get_direction(angle);
+		body.move();
+
+		return body;
 	}
 
 })();

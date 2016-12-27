@@ -41,6 +41,11 @@
 		$.enemys = {};
 		$.stage.addChild($.other);
 
+		// 他プレイヤーの発射したショットの管理
+		$.other_bullets = new PIXI.Container();
+		$.bullets = {};
+		$.stage.addChild($.other_bullets);
+
 		// keyboard arrow keys
 		let left = keyboard(37);
 		let up = keyboard(38);
@@ -98,7 +103,6 @@
 
 		// 他プレイヤーの情報を初期化する
 		other_loop();
-		setTimeout(other_loop, 1200);
 
 		game_loop();
 	}
@@ -106,24 +110,32 @@
 	// 仮
 	let json = {
 		"stars":[
-			{"id": 2, "position":{"x": 50, "y": 50}, "alive": true, "angle": 45},
-			{"id": 4, "position":{"x": 400, "y": 50}, "alive": true, "angle": 215}
+			{"id": 2, "position":{"x": 50, "y": 80}, "alive": true, "angle": 180},
+			{"id": 4, "position":{"x": 400, "y": 50}, "alive": true, "angle": 180}
 		],
 		"bullets": [
-			{"id": 0, "position":{"x": 50, "y": 50}, "alive": true, "angle": 45},
-			{"id": 1, "position":{"x": 400, "y": 50}, "alive": true, "angle": 215}
+			{"id": 0, "position":{"x": 400, "y": 200}, "alive": true, "angle": 180, stars_id: 4},
+			{"id": 1, "position":{"x": 400, "y": 100}, "alive": true, "angle": 180, stars_id: 4},
+			{"id": 2, "position":{"x": 400, "y": 82}, "alive": false, "angle": 180, stars_id: 4},
 		]
+	}
 
-	setTimeout(()=>{
-		json = [
-			{"id": 2, "position":{"x": 58, "y": 58}, "alive": true, "angle": 215},
-			{"id": 4, "position":{"x": 408, "y": 58}, "alive": true, "angle": 45},
-		]
-	}, 1000)
+	// 自分以外を移動させるためのサンプル
+	let sample = function (){
+		let y = json.stars[0].position.y + 2;
+		json.bullets.map((property)=>{
+			property.position.y += 8;
+		})
+		if(y <= stage.y){
+			json.stars[0].position.y = y;
+		}
+	};
 
 	let game_loop = () => {
 		request_animation_frame(game_loop);
-		// other_loop();
+
+		sample();
+		other_loop();
 		$.you.move();
 		$.renderer.render($.stage);
 	}
@@ -175,9 +187,8 @@
 	}
 
 	let other_loop = () => {
-		json.map((property, index) => {
+		json.stars.map((property, index) => {
 			let already = false;
-			console.log($.enemys);
 			for(let _key in $.enemys){
 				let key = _key - 0;
 				if(property.id === key){
@@ -191,7 +202,24 @@
 				$.enemys[property.id] = new Enemy(property);
 				$.other.addChild($.enemys[property.id].get_pixi());
 			}
-		})
+		});
+
+		json.bullets.map((property, index) => {
+			let already = false;
+			for(let _key in $.bullets){
+				let key = _key - 0;
+				if(property.id === key){
+					already = true;
+					break;
+				};
+			}
+			if(already){
+				$.bullets[property.id].update(property);
+			}else{
+				$.bullets[property.id] = new Bullet(property);
+				$.other.addChild($.bullets[property.id].get_pixi());
+			}
+		});
 	}
 
 	class StarManage {
@@ -322,10 +350,10 @@
 			this.vy = 0;
 
 			// 本体
-			let radius = 16;
+			this.radius = 16;
 			this.body = new PIXI.Graphics();
 			this.body.beginFill(0x000);
-			this.body.drawCircle(0, 0, radius);
+			this.body.drawCircle(0, 0, this.radius);
 			this.body.endFill();
 			this.body.x = 0;
 			this.body.y = 0;
@@ -333,7 +361,7 @@
 			// safe zone
 			this.circle = new PIXI.Graphics();
 			this.circle.lineStyle(2, 0x000);
-			this.circle.drawCircle(0, 0, radius * 2);
+			this.circle.drawCircle(0, 0, this.radius * 2);
 			this.circle.endFill();
 			this.circle.x = this.body.x;
 			this.circle.y = this.body.y;
@@ -348,7 +376,7 @@
 			]);
 			this.arrow.endFill();
 			this.arrow.x = this.body.x;
-			this.arrow.y = this.body.y - radius - 16;
+			this.arrow.y = this.body.y - this.radius - 16;
 
 			// グループ化する
 			this.star = new PIXI.Container();
@@ -370,10 +398,19 @@
 			return this.star;
 		}
 		move() {
+		 	// 表示判定
 			if(this.running && this.alive){
-				this.star.y += this.vy;
-				this.star.x += this.vx;
-				this.rotate();
+				let x = this.star.x + this.vx;
+				let y = this.star.y + this.vy;
+				// フィールド内
+		 		if(x >= 0 &&
+		 		x <= stage.x &&
+		 		y >= 0 &&
+		 		y <= stage.y){
+					this.star.x = x;
+		 			this.star.y = y;
+					this.rotate();
+				}
 			}
 		}
 		rotate(){
@@ -401,6 +438,9 @@
 
 	class Bullet{
 		constructor(x, y, angle){
+			this.running = true;
+			this.alive = true;
+
 			this.radius = 4;
 			this.body = new PIXI.Graphics();
 			this.body.beginFill(0x000);
@@ -423,6 +463,10 @@
 			this.get_direction(angle);
 			this.move();
 		}
+		update(data) {
+			this.body.x = data.position.x;
+			this.body.y = data.position.y;
+		}
 		get_direction(angle) {
 			let sin =  Math.sin(angle * (Math.PI / 180));
 			sin = sin * 10 | 0 ? get_sign(sin): 0;
@@ -433,7 +477,7 @@
 			this.vx = sin * this.speed;
 			this.vy = -1 * cos * this.speed;
 		}
-		get_sprite(){
+		get_pixi(){
 			return this.body;
 		}
 		move() {
@@ -453,6 +497,11 @@
 
 
 	 		// 表示判定
+	 		if(!this.alive && !this.running){
+	 			$.stage.removeChild(this.body);
+	 			return;
+	 		}
+
 	 		if(tmpx < 0 || 
 	 		subx > stage.x ||
 	 		tmpy < 0 || 

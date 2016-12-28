@@ -20,6 +20,7 @@
 	}
 
 	document.addEventListener("DOMContentLoaded", () => {
+		$.socket = io();
 		setup();
 	})
 
@@ -123,13 +124,19 @@
 
 
 	let game_loop = () => {
-		request_animation_frame(game_loop);
+		// request_animation_frame(game_loop);
 
-		sample_loop();
+		// sample_loop();
 		other_loop();
 		$.you.loop();  
-		shot_loop();
+		you_shot_loop();
 		$.renderer.render($.stage);
+
+		let shots = $.you_shots.children;
+		$.socket.emit("update all", {
+			player: you,
+			// bullets: shots
+		})
 	}
 
 	let keyboard = (key_code) => {
@@ -182,22 +189,13 @@
 	// r2 stars or bullet
 	let is_hit_circle = (r1, r2) => {
  		let hit = false;
- 		let d = r1.distance(r2);
- 		if(d.length() <= r1.radius){
- 			console.log("hit!");
+ 		let p = {
+ 			x: r2.x - r1.x,
+ 			y: r2.y - r1.y,
  		};
+ 		let length = Math.sqrt(p.x * p.x + p.y * p.y);
+ 		return length <= r2.radius;
 	}
-
-	// 自分以外を移動させるためのサンプル
-	let sample_loop = function (){
-		let y = json.stars[0].position.y + 2;
-		json.bullets.map((property)=>{
-			property.position.y += 8;
-		})
-		if(y <= stage.y){
-			json.stars[0].position.y = y;
-		}
-	};
 
 	let other_loop = () => {
 		json.stars.map((property, index) => {
@@ -245,21 +243,15 @@
 		});
 	}
 
-	let shot_loop = function () {
+	let you_shot_loop = function () {
 		$.you_shots.children.map((property, index) => {
 			property.move();
+			$.other.children.map((item)=>{
+				is_hit_circle(item, property);
+			});
 		})
-	}
+	} 
 
-	class Point {
-		constructor() {
-			this.x = 0;
-			this.y = 0
-		}
-		length() {
-			return Math.sqrt(this.x * this.x + this.y * this.y);
-		}
-	}
 	let StarContainer = function() {
 		PIXI.Container.call(this);
 		this.piece = 360 / directions.length;
@@ -358,7 +350,7 @@
 			this.star.addChild(this.circle)
 			this.star.addChild(this.arrow)
 
-			this.star.x = x || 300;
+			this.star.x = x || 400;
 			this.star.y = y || 300;
 
 			// ショットを管理する
@@ -373,14 +365,19 @@
 		}
 		loop() {
 			// 衝突判定
-			// $.is_hit_circle(this.body, )
+			$.other_bullets.children.map((item) => {
+				// if(is_hit_circle(this.star, item)){
+				// 	item.running = false;
+				// 	item.alive = false;
+				// }
+			})
 		 	// 表示判定
 			if(this.running && this.alive){
 				let x = this.star.x + this.vx;
 				let y = this.star.y + this.vy;
 				// フィールド内
 		 		if(x >= 0 &&
-		 		x <= stage.x &&
+		 		x <= stage.x && 
 		 		y >= 0 &&
 		 		y <= stage.y){
 					this.star.x = x;
@@ -410,12 +407,6 @@
 		}
 		load_shot() {
 			this.fired_bullets -= 1;
-		}
-		distance(target) {
-			let p = new Point();
-			p.x = target.x - this.body.x
-			p.y =  target.y - this.body.y
-			return p;
 		}
 	}
 

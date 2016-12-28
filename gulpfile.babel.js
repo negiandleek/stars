@@ -148,8 +148,9 @@ gulp.task('clean:tmpdir', (cb) => {
 gulp.task('watch', (cb) => {
     browserSync.init({
         server: {
-            baseDir: [path.static]
+            proxy: "http://192.168.11.3:1234"
         },
+        port: 3000,
         notify: false,
         stream: true
     });

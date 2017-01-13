@@ -104,41 +104,32 @@
 		}
 
 		// 他プレイヤーの情報を初期化する
-		other_loop();
+		// other_loop();
 
 		game_loop();
 	}
 
-	// 仮
-	let json = {
-		"stars":[
-			{"id": 2, "position":{"x": 50, "y": 80}, "alive": true, "angle": 180},
-			{"id": 4, "position":{"x": 400, "y": 50}, "alive": true, "angle": 180}
-		],
-		"bullets": [
-			{"id": 0, "position":{"x": 400, "y": 200}, "alive": true, "angle": 180, stars_id: 4},
-			{"id": 1, "position":{"x": 400, "y": 100}, "alive": true, "angle": 180, stars_id: 4},
-			{"id": 2, "position":{"x": 400, "y": 82}, "alive": false, "angle": 180, stars_id: 4},
-		]
-	}
-
-
 	let game_loop = () => {
-		// request_animation_frame(game_loop);
+		request_animation_frame(game_loop);
 
-		// sample_loop();
-		other_loop();
+		// other_loop();
 		$.you.loop();  
 		you_shot_loop();
 		$.renderer.render($.stage);
+		let you = $.you.letter;
+		let shots = [];
+		$.you_shots.children.map((item)=>{
+			shots.push(item.letter);
+		});
 
-		let shots = $.you_shots.children;
-		$.socket.emit("update all", {
-			player: you,
-			// bullets: shots
+		// $.socket.emit("update shot", {
+		// 	shots: shots
+		// })
+
+		$.socket.emit("update ship", {
+			ship: you
 		})
 	}
-
 	let keyboard = (key_code) => {
 		let key = {};
 		key.code = key_code;
@@ -358,6 +349,11 @@
 			this.fired_bullets = 0;
 			this.bullets = [];
 			this.load_time = 500;
+
+			this.letter = {
+				x: this.star.x,
+				y: this.star.y,
+			};
 		}
 		get_pixi(){
 			// pixiに関する情報を返す
@@ -380,8 +376,8 @@
 		 		x <= stage.x && 
 		 		y >= 0 &&
 		 		y <= stage.y){
-					this.star.x = x;
-		 			this.star.y = y;
+					this.letter.x = this.star.x = x;
+		 			this.letter.y = this.star.y = y;
 					this.rotate();
 				}
 			}
@@ -400,7 +396,7 @@
 				let shot = Bullet(x, y, this.angle);
 				$.you_shots.addChild(shot);
 				this.fired_bullets += 1;
-				
+
 				// 発射すると装填時間がそれぞれにかかる
 				setTimeout(this.load_shot.bind(this), this.load_time);
 			}
@@ -490,9 +486,6 @@
 
 		body.angle = angle;
 		body.is_ready = false;
-		
-		// ステージに追加
-		$.stage.addChild(body);
 
 		// 決まった方向に動かす
 		body.vx = 0;
@@ -533,7 +526,7 @@
 
 	 		// 表示判定
 	 		if(!this.alive && !this.running){
-	 			$.stage.removeChild(this);
+	 			$.you_shots.removeChild(this);
 	 			return;
 	 		}
 
@@ -541,13 +534,19 @@
 	 		subx > stage.x ||
 	 		tmpy < 0 || 
 	 		suby > stage.y){
-	 			$.stage.removeChild(this);
+	 			$.you_shots.removeChild(this);
+	 			return;
 	 		}
 		}
 
 		// vxとvyを定める
 		body.get_direction(angle);
 		body.move();
+
+		body.letter = {
+			x: body.x,
+			y: body.y
+		}
 
 		return body;
 	}

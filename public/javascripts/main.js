@@ -21,7 +21,11 @@
 
 	document.addEventListener("DOMContentLoaded", () => {
 		$.socket = io();
-		setup();
+		let _id = 0;
+		$.socket.emit("add ship", (data) => {
+			_id = data.id;
+		});
+		setup(_id);
 	})
 
 	let setup = () => {
@@ -298,8 +302,9 @@
 	}
 
 	class Player extends StarContainer{
-		constructor(x, y) {
+		constructor(x, y, id) {
 			super();
+			this.id = id;
 			this.running = true;
 			this.alive = true;
 			this.angle = 0;
@@ -353,6 +358,7 @@
 			this.letter = {
 				x: this.star.x,
 				y: this.star.y,
+				id: this.id
 			};
 		}
 		get_pixi(){

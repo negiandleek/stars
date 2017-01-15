@@ -21,11 +21,94 @@
 
 	document.addEventListener("DOMContentLoaded", () => {
 		$.socket = io();
-		let _id = 0;
-		$.socket.emit("add ship", (data) => {
-			_id = data.id;
+		setup();
+		$.socket.on("add ship", (data) => {
+			let _ships = data.ships;
+			$.you.letter.id = $.you.id = data.id;
+			
+			for(let key in _ships){
+				$.other.addChild(new Enemy(_ships[key]).star);
+			}
 		});
-		setup(_id);
+
+		$.socket.on("add enemy", (data) => {
+			$.other.addChild(new Enemy(data).star);
+		})
+
+		$.socket.on("update", (data) => {
+			let length = $.other.children.length;
+			let ship_data = data.ships;
+			for(let key in ship_data){
+				for(let i = 0; i < length; i += 1){
+					let item = $.other.children[i];
+					if(key === item.id){
+						item.x = ship_data[key].x;
+						item.y = ship_data[key].y;
+						break;
+					}
+				}
+			}
+
+			let shots_data = data.shots;
+			let _length = $.you_shots.children.length;
+			let __length = $.other_bullets.children.length;
+
+			for(let key in shots_data){
+				let state = true;
+				for(let i = 0; i < _length; i += 1){
+					if($.you_shots.children[i].id === key){
+						state = false;
+						break;
+					}
+				}
+				if(!state)continue;
+
+				let already = false;
+				let index = -1;
+				for(let i = 0; i < __length; i += 1){
+					if($.other_bullets.children[i].id === key){
+						already = true;
+						index = i;
+						break;
+					}
+				}
+				if(!already){
+					$.other_bullets.addChild(new Bullet(shots_data[key].x, shots_data[key].y, 0, key));
+					console.log($.other_bullets.children);
+				}else{
+					$.other_bullets.children[index].x = shots_data[key].x;
+					$.other_bullets.children[index].y = shots_data[key].y;
+				}
+			}
+		});
+
+		$.socket.on("delete enemy", (data) => {
+			let _id = data.id;
+			let length = $.other.children.length;
+			for(let i = 0; i < length; i += 1){
+				let item = $.other.children[i];
+				if(_id === item.id){
+					$.other.removeChild(item);
+					break;
+				}
+			}
+		})
+
+		$.socket.on("delete", (data) => {
+			let length = $.other_bullets.children.length;
+			let array = []
+			for(let i = 0; i < length; i += 1){
+				let item = $.other_bullets.children[i];
+				if(item.id === data.id){
+					array.push(i);
+				}
+			}
+			if(array.length > 0){
+				array.map((item)=>{
+					$.other_bullets.removeChild($.other_bullets.children[item]);
+				})
+			}
+		})
 	})
 
 	let setup = () => {
@@ -109,8 +192,15 @@
 
 		// 他プレイヤーの情報を初期化する
 		// other_loop();
-
+		init_server();
 		game_loop();
+	}
+
+	let init_server = () => {
+		$.socket.emit("init ship", {
+			x: $.you.letter.x,
+			y: $.you.letter.y,
+		});
 	}
 
 	let game_loop = () => {
@@ -121,14 +211,19 @@
 		you_shot_loop();
 		$.renderer.render($.stage);
 		let you = $.you.letter;
+		
 		let shots = [];
 		$.you_shots.children.map((item)=>{
-			shots.push(item.letter);
+			shots.push({
+				x: item.x,
+				y: item.y,
+				id: item.id
+			});
 		});
 
-		// $.socket.emit("update shot", {
-		// 	shots: shots
-		// })
+		$.socket.emit("update shot", {
+			shots: shots
+		})
 
 		$.socket.emit("update ship", {
 			ship: you
@@ -302,9 +397,9 @@
 	}
 
 	class Player extends StarContainer{
-		constructor(x, y, id) {
+		constructor(x, y) {
 			super();
-			this.id = id;
+			this.id = -1;
 			this.running = true;
 			this.alive = true;
 			this.angle = 0;
@@ -414,6 +509,7 @@
 
 	function Enemy(data){
 		let self = {};
+
 		self.running = true;
 		self.alive = true;
 
@@ -449,20 +545,13 @@
 
 		// グループ化する
 		self.star = new StarContainer();
+		self.star.id = data.id;
 		self.star.addChild(self.body);
 		self.star.addChild(self.circle);
 		self.star.addChild(self.arrow);
-		self.star.x = data.position.x;
-		self.star.y = data.position.y;
-		self.star.id = data.id || -1;
+		self.star.x = data.x;
+		self.star.y = data.y;
 		self.star.angle = 0;
-
-		self.star.update = function(data) {
-			this.x = data.position.x;
-			this.y = data.position.y;
-			this.rotate(data.angle);
-		}
-
 		self.star.rotate = function(angle) {
 			if(this.angle !== angle){
 				this.rotation += this.get_radian(angle);
@@ -471,14 +560,14 @@
 		}
 
 		// 回転させる
-		self.star.rotate(data.angle);
+		// self.star.rotate(data.angle);
 
 		return self;
 	}
 
 	function Bullet(x, y, angle, id){
 		let body = new PIXI.Graphics();
-		body.id = -1;
+		body.id = id || Math.random().toString(36).substr(2, 9);
 		body.running = true;
 		body.alive = true;
 
@@ -497,7 +586,6 @@
 		body.vx = 0;
 		body.vy = 0;
 		body.speed = 8;
-		body.id = id || 0;
 		
 		body.update = function(data){
 			this.x = data.position.x;
@@ -533,6 +621,7 @@
 	 		// 表示判定
 	 		if(!this.alive && !this.running){
 	 			$.you_shots.removeChild(this);
+	 			body.delete();
 	 			return;
 	 		}
 
@@ -541,18 +630,26 @@
 	 		tmpy < 0 || 
 	 		suby > stage.y){
 	 			$.you_shots.removeChild(this);
+	 			body.delete();
 	 			return;
 	 		}
+		}
+
+		body.delete = () => {
+			$.socket.emit("delete shot", {
+				id: body.id
+		})
 		}
 
 		// vxとvyを定める
 		body.get_direction(angle);
 		body.move();
 
-		body.letter = {
-			x: body.x,
-			y: body.y
-		}
+		// body.letter = {
+		// 	x: body.x,
+		// 	y: body.y,
+		// 	id: body.id
+		// }
 
 		return body;
 	}

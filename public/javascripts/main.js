@@ -74,11 +74,18 @@
 				}
 				if(!already){
 					$.other_bullets.addChild(new Bullet(shots_data[key].x, shots_data[key].y, 0, key));
-					console.log($.other_bullets.children);
+					index = 0;
 				}else{
 					$.other_bullets.children[index].x = shots_data[key].x;
 					$.other_bullets.children[index].y = shots_data[key].y;
 				}
+				let tmp = {
+					x: $.you.star.x,
+					y: $.you.star.y,
+					radius: $.you.radius
+				}
+
+				is_hit_circle($.other_bullets.children[index], tmp);
 			}
 		});
 
@@ -284,7 +291,8 @@
  			y: r2.y - r1.y,
  		};
  		let length = Math.sqrt(p.x * p.x + p.y * p.y);
- 		return length <= r2.radius;
+ 		let tmp = r2.radius + r1.radius;
+ 		return length <= tmp;
 	}
 
 	let other_loop = () => {
@@ -336,9 +344,9 @@
 	let you_shot_loop = function () {
 		$.you_shots.children.map((property, index) => {
 			property.move();
-			$.other.children.map((item)=>{
-				is_hit_circle(item, property);
-			});
+			// $.other.children.map((item)=>{
+			// 	is_hit_circle(item, property);
+			// });
 		})
 	} 
 

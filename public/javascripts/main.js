@@ -22,6 +22,7 @@
 	document.addEventListener("DOMContentLoaded", () => {
 		$.socket = io();
 		setup();
+		
 		$.socket.on("add ship", (data) => {
 			let _ships = data.ships;
 			$.you.letter.id = $.you.id = data.id;
@@ -29,6 +30,39 @@
 			for(let key in _ships){
 				$.other.addChild(new Enemy(_ships[key]).star);
 			}
+			// 生成
+			function generation_position() {
+				let max_x = stage.x - 64;
+				let max_y = stage.y - 64;
+				let p = {
+					x: Math.floor(Math.random() * (max_x - 64) + 64),
+					y: Math.floor(Math.random() * (max_y - 64) + 64)
+				}
+				let flag = true;
+
+				for(let key in _ships){
+					let x = _ships[key].x;
+					let y = _ships[key].y;
+
+					let abs_x = Math.abs(p.x - x);
+					let abs_y = Math.abs(p.y - y);
+
+
+					if(abs_x < 64 && abs_y < 64){
+						flag = false;
+						generation_position();
+						break;
+					}
+				}
+
+				if(flag){
+					$.you.star.x = p.x;
+					$.you.star.y = p.y;
+				}
+			}
+
+			generation_position();
+
 		});
 
 		$.socket.on("add enemy", (data) => {
@@ -79,13 +113,22 @@
 					$.other_bullets.children[index].x = shots_data[key].x;
 					$.other_bullets.children[index].y = shots_data[key].y;
 				}
-				let tmp = {
-					x: $.you.star.x,
-					y: $.you.star.y,
-					radius: $.you.radius
-				}
 
-				is_hit_circle($.other_bullets.children[index], tmp);
+				if($.you.alive){
+					let tmp = {
+						x: $.you.star.x,
+						y: $.you.star.y,
+						radius: $.you.radius
+					}
+					let items = $.other_bullets.children[index];
+					if(is_hit_circle(items, tmp)){
+						end();
+						$.socket.emit("delete ship", {
+							palyer_id: $.you.id,
+							shot_id: items.id
+						})
+					};
+				}
 			}
 		});
 
@@ -126,21 +169,7 @@
 
 		$.stage = new PIXI.Container();
 
-		// 操作できるプレイヤー(あなた)の管理
-		$.you = new Player();
-		$.stage.addChild($.you.get_pixi());
-
-		// プレイヤーの発射したショットの管理
-		$.you_shots = new PIXI.Container();
-		$.stage.addChild($.you_shots);
-
-		// 操作できないプレイヤー(他プレイヤー)の管理
-		$.other = new PIXI.Container();
-		$.stage.addChild($.other);
-
-		// 他プレイヤーの発射したショットの管理
-		$.other_bullets = new PIXI.Container();
-		$.stage.addChild($.other_bullets);
+		start();
 
 		// keyboard arrow keys
 		let left = keyboard(37);
@@ -197,10 +226,31 @@
 			space.state = false
 		}
 
-		// 他プレイヤーの情報を初期化する
-		// other_loop();
 		init_server();
 		game_loop();
+	}
+
+	let start = () => {
+		// 操作できるプレイヤー(あなた)の管理
+		$.you = new Player();
+		$.stage.addChild($.you.get_pixi());
+
+		// プレイヤーの発射したショットの管理
+		$.you_shots = new PIXI.Container();
+		$.stage.addChild($.you_shots);
+
+		// 操作できないプレイヤー(他プレイヤー)の管理
+		$.other = new PIXI.Container();
+		$.stage.addChild($.other);
+
+		// 他プレイヤーの発射したショットの管理
+		$.other_bullets = new PIXI.Container();
+		$.stage.addChild($.other_bullets);
+	}
+
+	let end = () => {
+		$.you.alive = false;
+		$.stage.removeChild($.you.star);
 	}
 
 	let init_server = () => {
@@ -213,10 +263,9 @@
 	let game_loop = () => {
 		request_animation_frame(game_loop);
 
-		// other_loop();
+		$.renderer.render($.stage);
 		$.you.loop();  
 		you_shot_loop();
-		$.renderer.render($.stage);
 		let you = $.you.letter;
 		
 		let shots = [];
@@ -295,51 +344,51 @@
  		return length <= tmp;
 	}
 
-	let other_loop = () => {
-		json.stars.map((property, index) => {
-			let already = false;
-			let length = $.other.children.length;
+	// let other_loop = () => {
+	// 	json.stars.map((property, index) => {
+	// 		let already = false;
+	// 		let length = $.other.children.length;
 
-			for(let i = 0; i < length; i += 1){
-				let item = $.other.children[i];
-				if(item.id === property.id){
-					already = true;
-					index = i;
-					break;
-				}
-			}
+	// 		for(let i = 0; i < length; i += 1){
+	// 			let item = $.other.children[i];
+	// 			if(item.id === property.id){
+	// 				already = true;
+	// 				index = i;
+	// 				break;
+	// 			}
+	// 		}
 
-			if(already){
-				$.other.children[index].update(property);
-			}else{
-				$.other.addChild(new Enemy(property).star);
-			}
-		});
+	// 		if(already){
+	// 			$.other.children[index].update(property);
+	// 		}else{
+	// 			$.other.addChild(new Enemy(property).star);
+	// 		}
+	// 	});
 
-		json.bullets.map((property) => {
-			let already = false;
-			let index = 0;
-			let length = $.other_bullets.children.length;
+	// 	json.bullets.map((property) => {
+	// 		let already = false;
+	// 		let index = 0;
+	// 		let length = $.other_bullets.children.length;
 
-			for(let i = 0; i < length; i += 1){
-				let item = $.other_bullets.children[i];
-				if(item.id === property.id){
-					already = true;
-					index = i;
-					break;
-				}
-			}
-			if(already){
-				$.other_bullets.children[index].update(property);
-			}else{
-				let x = property.position.x;
-				let y = property.position.y;
-				let angle = property.angle;
-				let id = property.id;
-				$.other_bullets.addChild(new Bullet(x, y, angle, id));
-			}
-		});
-	}
+	// 		for(let i = 0; i < length; i += 1){
+	// 			let item = $.other_bullets.children[i];
+	// 			if(item.id === property.id){
+	// 				already = true;
+	// 				index = i;
+	// 				break;
+	// 			}
+	// 		}
+	// 		if(already){
+	// 			$.other_bullets.children[index].update(property);
+	// 		}else{
+	// 			let x = property.position.x;
+	// 			let y = property.position.y;
+	// 			let angle = property.angle;
+	// 			let id = property.id;
+	// 			$.other_bullets.addChild(new Bullet(x, y, angle, id));
+	// 		}
+	// 	});
+	// }
 
 	let you_shot_loop = function () {
 		$.you_shots.children.map((property, index) => {
@@ -405,7 +454,7 @@
 	}
 
 	class Player extends StarContainer{
-		constructor(x, y) {
+		constructor() {
 			super();
 			this.id = -1;
 			this.running = true;
@@ -449,8 +498,8 @@
 			this.star.addChild(this.circle)
 			this.star.addChild(this.arrow)
 
-			this.star.x = x || 400;
-			this.star.y = y || 300;
+			this.star.x = 0;
+			this.star.y = 0;
 
 			// ショットを管理する
 			this.loaded_bullets = 3;
@@ -469,17 +518,24 @@
 			return this.star;
 		}
 		loop() {
-			// 衝突判定
-			$.other_bullets.children.map((item) => {
-				// if(is_hit_circle(this.star, item)){
-				// 	item.running = false;
-				// 	item.alive = false;
-				// }
-			})
 		 	// 表示判定
 			if(this.running && this.alive){
 				let x = this.star.x + this.vx;
 				let y = this.star.y + this.vy;
+				// 他のプレイヤー
+				let items = $.other.children;
+				let length = $.other.children.length;
+				for(let i = 0 ; i < length; i += 1){
+					let _x = items[i].x;
+					let _y = items[i].y;
+					let abs_x = Math.abs(x - _x);
+					let abs_y = Math.abs(y - _y);
+					if(abs_x < 64 && abs_y < 64){
+						this.rotate();
+						return;
+					}
+				}
+
 				// フィールド内
 		 		if(x >= 0 &&
 		 		x <= stage.x && 
@@ -652,12 +708,6 @@
 		// vxとvyを定める
 		body.get_direction(angle);
 		body.move();
-
-		// body.letter = {
-		// 	x: body.x,
-		// 	y: body.y,
-		// 	id: body.id
-		// }
 
 		return body;
 	}

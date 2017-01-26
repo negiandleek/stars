@@ -78,6 +78,8 @@
 					if(key === item.id){
 						item.x = ship_data[key].x;
 						item.y = ship_data[key].y;
+						item.rotate(ship_data[key].angle);
+
 						break;
 					}
 				}
@@ -257,6 +259,7 @@
 		$.socket.emit("init ship", {
 			x: $.you.letter.x,
 			y: $.you.letter.y,
+			angle: $.you.letter.angle
 		});
 	}
 
@@ -273,7 +276,7 @@
 			shots.push({
 				x: item.x,
 				y: item.y,
-				id: item.id
+				id: item.id,
 			});
 		});
 
@@ -510,6 +513,7 @@
 			this.letter = {
 				x: this.star.x,
 				y: this.star.y,
+				angle: this.angle,
 				id: this.id
 			};
 		}
@@ -551,7 +555,7 @@
 			let angle = this.detecte_angle();
 			if(this.angle !== angle){
 				this.star.rotation += this.get_radian(angle);
-				this.angle = angle;
+				this.letter.angle = this.angle = angle;
 			}
 		}
 		shot() {

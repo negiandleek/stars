@@ -14,15 +14,23 @@
 		x: 512,
 		y: 512
 	};
-	let scope = {
-		x: 512,
-		y: 512
-	}
+	// let scope = {
+	// 	x: 512,
+	// 	y: 512
+	// }
+	
+	$.game_state = "menu";
 
 	document.addEventListener("DOMContentLoaded", () => {
 		$.socket = io();
 		setup();
-		
+		init_ship();
+		init_shot();
+		init_enemy();
+		init_ship_server();
+		game_loop();
+		menu(true, "start");
+
 		$.socket.on("add ship", (data) => {
 			let _ships = data.ships;
 			$.you.letter.id = $.you.id = data.id;
@@ -30,38 +38,6 @@
 			for(let key in _ships){
 				$.other.addChild(new Enemy(_ships[key]).star);
 			}
-			// 生成
-			function generation_position() {
-				let max_x = stage.x - 64;
-				let max_y = stage.y - 64;
-				let p = {
-					x: Math.floor(Math.random() * (max_x - 64) + 64),
-					y: Math.floor(Math.random() * (max_y - 64) + 64)
-				}
-				let flag = true;
-
-				for(let key in _ships){
-					let x = _ships[key].x;
-					let y = _ships[key].y;
-
-					let abs_x = Math.abs(p.x - x);
-					let abs_y = Math.abs(p.y - y);
-
-
-					if(abs_x < 64 && abs_y < 64){
-						flag = false;
-						generation_position();
-						break;
-					}
-				}
-
-				if(flag){
-					$.you.star.x = p.x;
-					$.you.star.y = p.y;
-				}
-			}
-
-			generation_position();
 
 		});
 
@@ -79,7 +55,6 @@
 						item.x = ship_data[key].x;
 						item.y = ship_data[key].y;
 						item.rotate(ship_data[key].angle);
-
 						break;
 					}
 				}
@@ -171,7 +146,7 @@
 
 		$.stage = new PIXI.Container();
 
-		start();
+		// start();
 
 		// keyboard arrow keys
 		let left = keyboard(37);
@@ -220,27 +195,56 @@
 		space.state = false;
 		space.press = () => {
 			if(!space.state){
-				$.you.shot();
+				if($.game_state === "menu"){
+					menu(false);
+					$.game_state = "play"
+					$.you.running = true;
+					$.you.generation_position();
+				}else if($.game_state === "play"){
+					$.you.shot();
+				}
 			}
 			space.state = true;
 		}
 		space.release = () => {
 			space.state = false
 		}
-
-		init_server();
-		game_loop();
 	}
 
-	let start = () => {
+	let menu = (state, type) => {
+		if(state){
+			$.menu = new PIXI.Graphics();
+			$.menu.beginFill(0x212121, 0.8);
+			$.menu.drawRect(0,0, stage.x, stage.y);
+			$.stage.addChild($.menu);
+			if(type === "start"){
+				let word = "space key";
+				let style = {fill: "#fff"}
+				let text_obj = new PIXI.Text(word, style);
+				text_obj.position.x = 512 / 2 - (text_obj.width / 2);
+				text_obj.position.y = 512 / 2 - (text_obj.height / 2);
+				$.menu.addChild(text_obj);
+			}else if(type === "gameover"){
+
+			}
+		}else{
+			$.stage.removeChild($.menu);
+		}
+	}
+
+	let init_ship = () => {
 		// 操作できるプレイヤー(あなた)の管理
 		$.you = new Player();
 		$.stage.addChild($.you.get_pixi());
+	}
 
+	let init_shot = () => {
 		// プレイヤーの発射したショットの管理
 		$.you_shots = new PIXI.Container();
 		$.stage.addChild($.you_shots);
+	}
 
+	let init_enemy = () => {
 		// 操作できないプレイヤー(他プレイヤー)の管理
 		$.other = new PIXI.Container();
 		$.stage.addChild($.other);
@@ -255,7 +259,7 @@
 		$.stage.removeChild($.you.star);
 	}
 
-	let init_server = () => {
+	let init_ship_server = () => {
 		$.socket.emit("init ship", {
 			x: $.you.letter.x,
 			y: $.you.letter.y,
@@ -280,13 +284,15 @@
 			});
 		});
 
-		$.socket.emit("update shot", {
-			shots: shots
-		})
+		if($.you.running){
+			$.socket.emit("update shot", {
+				shots: shots
+			})
 
-		$.socket.emit("update ship", {
-			ship: you
-		})
+			$.socket.emit("update ship", {
+				ship: you
+			})
+		}
 	}
 	let keyboard = (key_code) => {
 		let key = {};
@@ -347,58 +353,9 @@
  		return length <= tmp;
 	}
 
-	// let other_loop = () => {
-	// 	json.stars.map((property, index) => {
-	// 		let already = false;
-	// 		let length = $.other.children.length;
-
-	// 		for(let i = 0; i < length; i += 1){
-	// 			let item = $.other.children[i];
-	// 			if(item.id === property.id){
-	// 				already = true;
-	// 				index = i;
-	// 				break;
-	// 			}
-	// 		}
-
-	// 		if(already){
-	// 			$.other.children[index].update(property);
-	// 		}else{
-	// 			$.other.addChild(new Enemy(property).star);
-	// 		}
-	// 	});
-
-	// 	json.bullets.map((property) => {
-	// 		let already = false;
-	// 		let index = 0;
-	// 		let length = $.other_bullets.children.length;
-
-	// 		for(let i = 0; i < length; i += 1){
-	// 			let item = $.other_bullets.children[i];
-	// 			if(item.id === property.id){
-	// 				already = true;
-	// 				index = i;
-	// 				break;
-	// 			}
-	// 		}
-	// 		if(already){
-	// 			$.other_bullets.children[index].update(property);
-	// 		}else{
-	// 			let x = property.position.x;
-	// 			let y = property.position.y;
-	// 			let angle = property.angle;
-	// 			let id = property.id;
-	// 			$.other_bullets.addChild(new Bullet(x, y, angle, id));
-	// 		}
-	// 	});
-	// }
-
 	let you_shot_loop = function () {
 		$.you_shots.children.map((property, index) => {
 			property.move();
-			// $.other.children.map((item)=>{
-			// 	is_hit_circle(item, property);
-			// });
 		})
 	} 
 
@@ -460,7 +417,7 @@
 		constructor() {
 			super();
 			this.id = -1;
-			this.running = true;
+			this.running = false;
 			this.alive = true;
 			this.angle = 0;
 			this.vx = 0;
@@ -501,8 +458,8 @@
 			this.star.addChild(this.circle)
 			this.star.addChild(this.arrow)
 
-			this.star.x = 0;
-			this.star.y = 0;
+			this.star.x = 512 / 2;
+			this.star.y = 512 / 2;
 
 			// ショットを管理する
 			this.loaded_bullets = 3;
@@ -520,6 +477,40 @@
 		get_pixi(){
 			// pixiに関する情報を返す
 			return this.star;
+		}
+		// 生成
+		generation_position() {
+			let max_x = stage.x - 64;
+			let max_y = stage.y - 64;
+			let p = {
+				x: Math.floor(Math.random() * (max_x - 64) + 64),
+				y: Math.floor(Math.random() * (max_y - 64) + 64)
+			}
+			
+			let flag = true;
+			let _ships = $.other.length;
+			
+			let items = $.other.children;
+			let length = $.other.children.length;
+			for(let i = 0 ; i < length; i += 1){
+				let x = items[i].x;
+				let y = items[i].y;
+
+				let abs_x = Math.abs(p.x - x);
+				let abs_y = Math.abs(p.y - y);
+
+
+				if(abs_x < 64 && abs_y < 64){
+					flag = false;
+					this.generation_position();
+					break;
+				}
+			}
+
+			if(flag){
+				$.you.star.x = p.x;
+				$.you.star.y = p.y;
+			}
 		}
 		loop() {
 		 	// 表示判定
@@ -622,13 +613,12 @@
 		self.star.angle = 0;
 		self.star.rotate = function(angle) {
 			if(this.angle !== angle){
+				console.log(angle);
 				this.rotation += this.get_radian(angle);
 				this.angle = angle;
+				return this.angle;
 			}
 		}
-
-		// 回転させる
-		// self.star.rotate(data.angle);
 
 		return self;
 	}

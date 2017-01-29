@@ -33,8 +33,8 @@
 
 		$.socket.on("add ship", (data) => {
 			let _ships = data.ships;
-			$.you.letter.id = $.you.id = data.id;
-			
+			$.you.id = data.id;
+			$.you.running = true;
 			for(let key in _ships){
 				$.other.addChild(new Enemy(_ships[key]).star);
 			}
@@ -91,25 +91,31 @@
 					$.other_bullets.children[index].y = shots_data[key].y;
 				}
 
-				if($.you.alive){
-					let tmp = {
-						x: $.you.star.x,
-						y: $.you.star.y,
-						radius: $.you.radius
-					}
-					let items = $.other_bullets.children[index];
-					if(is_hit_circle(items, tmp)){
-						end();
-						$.socket.emit("delete ship", {
-							palyer_id: $.you.id,
-							shot_id: items.id
-						})
-					};
-				}
+				// if($.you.alive){
+				// 	let tmp = {
+				// 		x: $.you.star.x,
+				// 		y: $.you.star.y,
+				// 		radius: $.you.radius
+				// 	}
+				// 	let items = $.other_bullets.children[index];
+				// 	if(is_hit_circle(items, tmp)){
+				// 		end();
+				// 		$.socket.emit("delete ship", {
+				// 			ship_id: $.you.id,
+				// 			shot_id: items.id
+				// 		})
+				// 	};
+				// }
 			}
 		});
 
-		$.socket.on("delete enemy", (data) => {
+		$.socket.on("delete ship", (data) => {
+			console.log("gameover!!!");
+			$.you.alive = false;
+			$.stage.removeChild($.you);
+		})
+
+		$.socket.on("disconnect enemy", (data) => {
 			let _id = data.id;
 			let length = $.other.children.length;
 			for(let i = 0; i < length; i += 1){
@@ -198,7 +204,7 @@
 				if($.game_state === "menu"){
 					menu(false);
 					$.game_state = "play"
-					$.you.running = true;
+					$.you.alive = true;
 					$.you.generation_position();
 				}else if($.game_state === "play"){
 					$.you.shot();
@@ -263,7 +269,8 @@
 		$.socket.emit("init ship", {
 			x: $.you.letter.x,
 			y: $.you.letter.y,
-			angle: $.you.letter.angle
+			angle: $.you.letter.angle,
+			alive: $.you.alive,
 		});
 	}
 
@@ -274,6 +281,7 @@
 		$.you.loop();  
 		you_shot_loop();
 		let you = $.you.letter;
+		you.id = $.you.id;
 		
 		let shots = [];
 		$.you_shots.children.map((item)=>{
@@ -284,15 +292,16 @@
 			});
 		});
 
-		if($.you.running){
+		if($.you.running && $.you.alive){
 			$.socket.emit("update shot", {
 				shots: shots
 			})
 
 			$.socket.emit("update ship", {
-				ship: you
+				ship: you,
+				alive: $.you.alive,
 			})
-		}
+		} 
 	}
 	let keyboard = (key_code) => {
 		let key = {};
@@ -356,6 +365,22 @@
 	let you_shot_loop = function () {
 		$.you_shots.children.map((property, index) => {
 			property.move();
+			let tmp = {
+				x: property.x,
+				y: property.y,
+				radius: property.radius
+			};
+			let items = $.other.children;
+			let length = items.length;
+			for(let i = 0; i < length; i += 1){
+				if(is_hit_circle(items[i],tmp)){
+					$.you_shots.removeChild(property);
+					property.delete();
+					$.socket.emit("delete enemy", {
+						ship_id: items[i].id,
+					})
+				}
+			}
 		})
 	} 
 
@@ -418,7 +443,7 @@
 			super();
 			this.id = -1;
 			this.running = false;
-			this.alive = true;
+			this.alive = false;
 			this.angle = 0;
 			this.vx = 0;
 			this.vy = 0;
@@ -471,7 +496,6 @@
 				x: this.star.x,
 				y: this.star.y,
 				angle: this.angle,
-				id: this.id
 			};
 		}
 		get_pixi(){
@@ -610,10 +634,11 @@
 		self.star.addChild(self.arrow);
 		self.star.x = data.x;
 		self.star.y = data.y;
+		self.star.radius = self.radius;
 		self.star.angle = 0;
 		self.star.rotate = function(angle) {
 			if(this.angle !== angle){
-				console.log(angle);
+				// console.log(angle);
 				this.rotation += this.get_radian(angle);
 				this.angle = angle;
 				return this.angle;
@@ -696,7 +721,7 @@
 		body.delete = () => {
 			$.socket.emit("delete shot", {
 				id: body.id
-		})
+			})
 		}
 
 		// vxとvyを定める

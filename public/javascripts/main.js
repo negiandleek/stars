@@ -14,10 +14,6 @@
 		x: 512,
 		y: 512
 	};
-	// let scope = {
-	// 	x: 512,
-	// 	y: 512
-	// }
 	
 	$.game_state = "menu";
 
@@ -29,6 +25,7 @@
 		init_enemy();
 		init_ship_server();
 		game_loop();
+		score();
 		menu(true, "start");
 
 		$.socket.on("add ship", (data) => {
@@ -36,9 +33,10 @@
 			$.you.id = data.id;
 			$.you.running = true;
 			for(let key in _ships){
-				$.other.addChild(new Enemy(_ships[key]).star);
+				if(_ships[key].ready && $.other.children.length === 0){
+					$.other.addChild(new Enemy(_ships[key]).star);
+				}
 			}
-
 		});
 
 		$.socket.on("add enemy", (data) => {
@@ -46,6 +44,7 @@
 		})
 
 		$.socket.on("update", (data) => {
+			// enemy shipを更新
 			let length = $.other.children.length;
 			let ship_data = data.ships;
 			for(let key in ship_data){
@@ -59,21 +58,14 @@
 					}
 				}
 			}
-
+			// enemyのshotを更新
 			let shots_data = data.shots;
 			let _length = $.you_shots.children.length;
 			let __length = $.other_bullets.children.length;
-
 			for(let key in shots_data){
-				let state = true;
-				for(let i = 0; i < _length; i += 1){
-					if($.you_shots.children[i].id === key){
-						state = false;
-						break;
-					}
+				if(shots_data[key].user_id === $.you.id){
+					continue;
 				}
-				if(!state)continue;
-
 				let already = false;
 				let index = -1;
 				for(let i = 0; i < __length; i += 1){
@@ -90,29 +82,27 @@
 					$.other_bullets.children[index].x = shots_data[key].x;
 					$.other_bullets.children[index].y = shots_data[key].y;
 				}
-
-				// if($.you.alive){
-				// 	let tmp = {
-				// 		x: $.you.star.x,
-				// 		y: $.you.star.y,
-				// 		radius: $.you.radius
-				// 	}
-				// 	let items = $.other_bullets.children[index];
-				// 	if(is_hit_circle(items, tmp)){
-				// 		end();
-				// 		$.socket.emit("delete ship", {
-				// 			ship_id: $.you.id,
-				// 			shot_id: items.id
-				// 		})
-				// 	};
-				// }
 			}
+
+			score(data.rank);
 		});
 
 		$.socket.on("delete ship", (data) => {
-			console.log("gameover!!!");
-			$.you.alive = false;
-			$.stage.removeChild($.you);
+			let _id = data.id;
+			if($.you.id === _id){
+				$.stage.removeChild($.you.get_pixi());
+				menu(true, "gameover");
+				$.game_state = "gameover";
+			}else{
+				let items = $.other.children;
+				let length = items.length;
+				for(let i = 0; i < length; i += 1){
+					if(items[i].id === _id){
+						$.other.removeChild(items[i]);
+						break;
+					}
+				}
+			}
 		})
 
 		$.socket.on("disconnect enemy", (data) => {
@@ -202,12 +192,21 @@
 		space.press = () => {
 			if(!space.state){
 				if($.game_state === "menu"){
-					menu(false);
 					$.game_state = "play"
+					menu(false);
 					$.you.alive = true;
 					$.you.generation_position();
-				}else if($.game_state === "play"){
-					$.you.shot();
+				}else if($.game_state === "play"){ 
+					if($.you.alive){
+						$.you.shot();
+					}
+				}else if($.game_state === "gameover"){
+					menu(false);
+					init_ship();
+					init_ship_server();
+					$.game_state = "play";
+					$.you.alive = true;
+					$.you.generation_position();
 				}
 			}
 			space.state = true;
@@ -216,6 +215,28 @@
 			space.state = false
 		}
 	}
+
+	let score = (data) => {
+		if(!data){
+			let x = stage.x - 100;
+			$.score = new PIXI.Graphics();
+			$.stage.addChild($.score);
+		}else{
+			$.score.removeChild(score.str_obj);
+			let length = data.length;
+			let str = "";
+			let style = {fill: "#000", font: "16px"}
+			for(let i = 0; i < length; i += 1){
+				if(data[i].ready){
+					str += data[i].id + ":";
+					str += data[i].score + "\n";
+				}
+			}
+			score.str_obj = new PIXI.Text(str, style)
+			$.score.addChild(score.str_obj)
+		}
+	}
+	score.str_obj = "";
 
 	let menu = (state, type) => {
 		if(state){
@@ -231,7 +252,12 @@
 				text_obj.position.y = 512 / 2 - (text_obj.height / 2);
 				$.menu.addChild(text_obj);
 			}else if(type === "gameover"){
-
+				let word = "score:" + $.you.score + "\ncontinue space key";
+				let style = {fill: "#fff"}
+				let text_obj = new PIXI.Text(word, style);
+				text_obj.position.x = 512 / 2 - (text_obj.width / 2);
+				text_obj.position.y = 512 / 2 - (text_obj.height / 2);
+				$.menu.addChild(text_obj);
 			}
 		}else{
 			$.stage.removeChild($.menu);
@@ -259,17 +285,12 @@
 		$.other_bullets = new PIXI.Container();
 		$.stage.addChild($.other_bullets);
 	}
-
-	let end = () => {
-		$.you.alive = false;
-		$.stage.removeChild($.you.star);
-	}
-
+	
 	let init_ship_server = () => {
 		$.socket.emit("init ship", {
-			x: $.you.letter.x,
-			y: $.you.letter.y,
-			angle: $.you.letter.angle,
+			x: $.you.star.x,
+			y: $.you.star.y,
+			angle: $.you.angle,
 			alive: $.you.alive,
 		});
 	}
@@ -280,8 +301,6 @@
 		$.renderer.render($.stage);
 		$.you.loop();  
 		you_shot_loop();
-		let you = $.you.letter;
-		you.id = $.you.id;
 		
 		let shots = [];
 		$.you_shots.children.map((item)=>{
@@ -289,6 +308,8 @@
 				x: item.x,
 				y: item.y,
 				id: item.id,
+				user_id: $.you.id,
+				score: $.you.score
 			});
 		});
 
@@ -296,10 +317,15 @@
 			$.socket.emit("update shot", {
 				shots: shots
 			})
-
 			$.socket.emit("update ship", {
-				ship: you,
-				alive: $.you.alive,
+				ship: {
+					x: $.you.star.x,
+					y: $.you.star.y,
+					angle: $.you.angle,
+					alive: $.you.alive,
+					id: $.you.id,
+					score: $.you.score
+				}
 			})
 		} 
 	}
@@ -363,7 +389,7 @@
 	}
 
 	let you_shot_loop = function () {
-		$.you_shots.children.map((property, index) => {
+		$.you_shots.children.map((property) => {
 			property.move();
 			let tmp = {
 				x: property.x,
@@ -372,15 +398,22 @@
 			};
 			let items = $.other.children;
 			let length = items.length;
+			let index = []
 			for(let i = 0; i < length; i += 1){
 				if(is_hit_circle(items[i],tmp)){
+					index.push(i);
+					$.you.score += 100;
 					$.you_shots.removeChild(property);
+					// 自分の玉にあたった敵を削除する
 					property.delete();
-					$.socket.emit("delete enemy", {
+					$.socket.emit("hit enemy", {
 						ship_id: items[i].id,
 					})
 				}
 			}
+			index.map((num)=> {
+				$.other.removeChild(items[num]);
+			});
 		})
 	} 
 
@@ -447,6 +480,7 @@
 			this.angle = 0;
 			this.vx = 0;
 			this.vy = 0;
+			this.score = 0;
 
 			// 本体
 			this.radius = 16;
@@ -491,12 +525,6 @@
 			this.fired_bullets = 0;
 			this.bullets = [];
 			this.load_time = 500;
-
-			this.letter = {
-				x: this.star.x,
-				y: this.star.y,
-				angle: this.angle,
-			};
 		}
 		get_pixi(){
 			// pixiに関する情報を返す
@@ -560,8 +588,8 @@
 		 		x <= stage.x && 
 		 		y >= 0 &&
 		 		y <= stage.y){
-					this.letter.x = this.star.x = x;
-		 			this.letter.y = this.star.y = y;
+					this.star.x = this.star.x = x;
+		 			this.star.y = this.star.y = y;
 					this.rotate();
 				}
 			}
@@ -570,7 +598,7 @@
 			let angle = this.detecte_angle();
 			if(this.angle !== angle){
 				this.star.rotation += this.get_radian(angle);
-				this.letter.angle = this.angle = angle;
+				this.star.angle = this.angle = angle;
 			}
 		}
 		shot() {
